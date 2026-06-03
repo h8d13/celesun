@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Celesun: a compass with a sun at its heart -->
+  <defs>
+    <radialGradient id="dial" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3a3f44"/>
+      <stop offset="100%" stop-color="#23272b"/>
+    </radialGradient>
+    <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff6c0"/>
+      <stop offset="70%" stop-color="#ffd11a"/>
+      <stop offset="100%" stop-color="#f5a300"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Dial -->
+  <circle cx="64" cy="64" r="58" fill="url(#dial)" stroke="#cfd6dc" stroke-width="3"/>
+
+  <!-- Cardinal ticks -->
+  <g stroke="#cfd6dc" stroke-width="3" stroke-linecap="round">
+    <line x1="64" y1="10" x2="64" y2="22"/>
+    <line x1="64" y1="106" x2="64" y2="118"/>
+    <line x1="10" y1="64" x2="22" y2="64"/>
+    <line x1="106" y1="64" x2="118" y2="64"/>
+  </g>
+
+  <!-- Compass needle -->
+  <g stroke-linejoin="round">
+    <polygon points="64,18 54,64 64,64" fill="#e23b3b"/>
+    <polygon points="64,18 74,64 64,64" fill="#b32424"/>
+    <polygon points="64,110 54,64 64,64" fill="#e6e9ec"/>
+    <polygon points="64,110 74,64 64,64" fill="#b9bfc4"/>
+  </g>
+
+  <!-- Sun rays -->
+  <g stroke="#ffd11a" stroke-width="3" stroke-linecap="round">
+    <line x1="64" y1="44" x2="64" y2="36"/>
+    <line x1="64" y1="84" x2="64" y2="92"/>
+    <line x1="44" y1="64" x2="36" y2="64"/>
+    <line x1="84" y1="64" x2="92" y2="64"/>
+    <line x1="50" y1="50" x2="44" y2="44"/>
+    <line x1="78" y1="78" x2="84" y2="84"/>
+    <line x1="78" y1="50" x2="84" y2="44"/>
+    <line x1="50" y1="78" x2="44" y2="84"/>
+  </g>
+
+  <!-- Sun core -->
+  <circle cx="64" cy="64" r="13" fill="url(#sun)" stroke="#f5a300" stroke-width="1.5"/>
+</svg>

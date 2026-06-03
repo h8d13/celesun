@@ -818,8 +818,10 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(application=app)
         self.set_title('Celesun')
 
-        # Set clock icon
-        self.set_icon_name('preferences-system-time')
+        # Register the bundled icon dir, then use our compass icon
+        icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icons')
+        Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(icon_dir)
+        self.set_icon_name('celesun')
 
         # Load config
         self.config = load_config()
