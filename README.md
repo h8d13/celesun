@@ -18,7 +18,7 @@ Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
 ```bash
 # Install system dependencies
-sudo pacman -S gtk4 libadwaita python-gobject python-cairo
+sudo pacman -S gtk4 python-gobject python-cairo
 
 # Create virtual environment with system packages
 python3 -m venv venv --system-site-packages
@@ -34,7 +34,7 @@ python3 -m venv venv --system-site-packages
 
 ```bash
 # Install system dependencies
-sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv
+sudo apt-get install python3-gi python3-gi-cairo gir1.2-gtk-4.0 python3-venv
 
 # Create virtual environment with system packages
 python3 -m venv venv --system-site-packages
@@ -50,7 +50,7 @@ python3 -m venv venv --system-site-packages
 
 ```bash
 # Install system dependencies
-sudo dnf install gtk4 libadwaita python3-gobject python3-cairo
+sudo dnf install gtk4 python3-gobject python3-cairo
 
 # Create virtual environment with system packages
 python3 -m venv venv --system-site-packages
