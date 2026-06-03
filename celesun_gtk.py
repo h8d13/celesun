@@ -8,9 +8,8 @@ import os
 import signal
 
 gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
 
-from gi.repository import Gtk, Adw, GLib, Gdk, GObject, Pango, PangoCairo
+from gi.repository import Gtk, GLib, GLibUnix, Gdk, GObject, Pango, PangoCairo
 import cairo
 from suntime import Sun
 import pytz
@@ -59,6 +58,7 @@ def load_config():
         'offset': 0,
         'dark_mode': False,
         'gradient_color': (255, 255, 0),
+        'gradient_opacity': 0.77,
         'window_width': 400,
         'window_height': 500,
         'font_family': 'Arial'
@@ -83,7 +83,7 @@ def load_config():
         return default_config
 
 
-def save_config(latitude, longitude, timezone, offset, dark_mode, gradient_color, window_width=400, window_height=500, font_family='Arial'):
+def save_config(latitude, longitude, timezone, offset, dark_mode, gradient_color, gradient_opacity=0.77, window_width=400, window_height=500, font_family='Arial'):
     """Save config to file"""
     config_path = get_config_path()
     config = {
@@ -93,6 +93,7 @@ def save_config(latitude, longitude, timezone, offset, dark_mode, gradient_color
         'offset': offset,
         'dark_mode': dark_mode,
         'gradient_color': list(gradient_color) if isinstance(gradient_color, tuple) else gradient_color,
+        'gradient_opacity': gradient_opacity,
         'window_width': window_width,
         'window_height': window_height,
         'font_family': font_family
@@ -106,7 +107,7 @@ def save_config(latitude, longitude, timezone, offset, dark_mode, gradient_color
 
 
 class SettingsDialog(Gtk.Window):
-    def __init__(self, parent, latitude, longitude, timezone, offset, dark_mode, gradient_color, font_family):
+    def __init__(self, parent, latitude, longitude, timezone, offset, dark_mode, gradient_color, gradient_opacity, font_family):
         super().__init__()
         self.set_transient_for(parent)
         self.set_modal(True)
@@ -203,6 +204,20 @@ class SettingsDialog(Gtk.Window):
         gradient_box.append(self.gradient_combo)
         main_box.append(gradient_box)
 
+        # Gradient opacity
+        opacity_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        opacity_label = Gtk.Label(label='Gradient Opacity:')
+        opacity_label.set_halign(Gtk.Align.START)
+        self.opacity_scale = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 0.0, 1.0, 0.01)
+        self.opacity_scale.set_value(gradient_opacity)
+        self.opacity_scale.set_draw_value(True)
+        self.opacity_scale.set_digits(2)
+        self.opacity_scale.set_hexpand(True)
+        opacity_box.append(opacity_label)
+        opacity_box.append(self.opacity_scale)
+        main_box.append(opacity_box)
+
         # Font selector
         font_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         font_label = Gtk.Label(label='Font Family:')
@@ -263,6 +278,7 @@ class SettingsDialog(Gtk.Window):
         self.offset_entry.set_text("0")
         self.dark_mode_check.set_active(False)
         self.gradient_combo.set_selected(0)
+        self.opacity_scale.set_value(0.77)
 
         # Reset font to Arial
         available_fonts = get_available_fonts()
@@ -287,13 +303,14 @@ class SettingsDialog(Gtk.Window):
             # Get gradient color based on selected index
             selected_index = self.gradient_combo.get_selected()
             gradient_color = self.gradient_colors[selected_index]
+            gradient_opacity = self.opacity_scale.get_value()
 
             # Get selected font
             available_fonts = get_available_fonts()
             font_index = self.font_combo.get_selected()
             font_family = available_fonts[font_index] if font_index < len(available_fonts) else 'Arial'
 
-            self.result = (latitude, longitude, timezone, offset, dark_mode, gradient_color, font_family)
+            self.result = (latitude, longitude, timezone, offset, dark_mode, gradient_color, gradient_opacity, font_family)
             self.close()
         except ValueError as e:
             print(f"Invalid input: {e}")
@@ -316,6 +333,7 @@ class CompassWidget(Gtk.DrawingArea):
         # Appearance
         self.dark_mode = False
         self.gradient_color = (255, 255, 0)
+        self.gradient_opacity = 0.77
         self.font_family = 'Arial'
 
         # Sun data
@@ -621,8 +639,7 @@ class CompassWidget(Gtk.DrawingArea):
                 cr.move_to(text_x - extents.width / 2, text_y + extents.height / 2)
                 cr.show_text(text)
 
-        # Draw bottom text (centered, 3 items)
-        offset_y = height - 15
+        # Draw text overlays
         cr.set_source_rgb(*text_color)
         cr.select_font_face(self.font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
         cr.set_font_size(max(11, radius * 0.08))  # ~12 at radius 150, min 11
@@ -631,16 +648,28 @@ class CompassWidget(Gtk.DrawingArea):
         minutes, seconds = divmod(remainder, 60)
         time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
-        # Center the 3 text items horizontally
-        spacing = width / 3
-        cr.move_to(10, offset_y)
-        cr.show_text(f"{self.event} in {time_str}")
+        # Equal top/bottom margins (glyph edge to window edge)
+        margin = 15
+        ascent, descent = cr.font_extents()[0], cr.font_extents()[1]
 
-        cr.move_to(spacing + 10, offset_y)
-        cr.show_text(f"Pos: {self.sun_position:.1f}°")
+        # Time/event line: top, centered
+        top_text = f"{self.event} in {time_str}"
+        top_extents = cr.text_extents(top_text)
+        cr.move_to((width - top_extents.width) / 2, margin + ascent)
+        cr.show_text(top_text)
 
-        cr.move_to(spacing * 2 + 10, offset_y)
-        cr.show_text(f"Dir: {self.sun_direction}")
+        # Pos / Dir: bottom, split left half / right half (centered in each)
+        offset_y = height - margin - descent
+        pos_text = f"Pos: {self.sun_position:.1f}°"
+        dir_text = f"Dir: {self.sun_direction}"
+        pos_extents = cr.text_extents(pos_text)
+        dir_extents = cr.text_extents(dir_text)
+
+        cr.move_to(width / 4 - pos_extents.width / 2, offset_y)
+        cr.show_text(pos_text)
+
+        cr.move_to(width * 3 / 4 - dir_extents.width / 2, offset_y)
+        cr.show_text(dir_text)
 
         # Time to angle function
         def time_to_angle(t):
@@ -698,7 +727,7 @@ class CompassWidget(Gtk.DrawingArea):
         label_y = center_y + label_radius * math.sin(math.radians(noon_angle))
         cr.set_source_rgb(*text_color)
         cr.select_font_face(self.font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(max(10, radius * 0.08))  # ~12 at radius 150, min 10
+        cr.set_font_size(max(9, radius * 0.067))  # ~10 at radius 150, min 9
         noon_text = self.solar_noon.strftime('%H:%M')
         extents = cr.text_extents(noon_text)
         cr.move_to(label_x - extents.width / 2, label_y + extents.height / 4)
@@ -707,8 +736,9 @@ class CompassWidget(Gtk.DrawingArea):
         # Draw daylight gradient
         gradient = cairo.RadialGradient(center_x, center_y, 0, center_x, center_y, radius)
         r, g, b = self.gradient_color[0]/255, self.gradient_color[1]/255, self.gradient_color[2]/255
-        gradient.add_color_stop_rgba(0.0, r, g, b, 0.77)
-        gradient.add_color_stop_rgba(0.5, r, g, b, 0.5)
+        op = self.gradient_opacity
+        gradient.add_color_stop_rgba(0.0, r, g, b, op)
+        gradient.add_color_stop_rgba(0.5, r, g, b, op * 0.65)
         gradient.add_color_stop_rgba(1.0, r, g, b, 0.0)
 
         cr.set_source(gradient)
@@ -783,7 +813,7 @@ class CompassWidget(Gtk.DrawingArea):
         return directions.get(angle, '')
 
 
-class MainWindow(Adw.ApplicationWindow):
+class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         self.set_title('Celesun')
@@ -799,20 +829,37 @@ class MainWindow(Adw.ApplicationWindow):
         height = max(350, self.config['window_height'])
         self.set_default_size(width, height)
 
-        # Header bar
-        header = Adw.HeaderBar()
-
-        # Settings button
-        settings_btn = Gtk.Button(icon_name='emblem-system-symbolic')
-        settings_btn.connect('clicked', self.open_settings)
-        header.pack_end(settings_btn)
+        # No GTK titlebar: let the window manager (KWin/Breeze) draw
+        # native server-side decorations so the window matches the desktop.
 
         # Main content
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        main_box.append(header)
 
         self.compass = CompassWidget(self)
-        main_box.append(self.compass)
+        self.compass.set_hexpand(True)
+        self.compass.set_vexpand(True)
+
+        # Discrete settings gear overlaid in the compass top-right corner
+        overlay = Gtk.Overlay()
+        overlay.set_child(self.compass)
+
+        settings_btn = Gtk.Button(icon_name='emblem-system-symbolic')
+        settings_btn.add_css_class('flat')
+        settings_btn.set_halign(Gtk.Align.END)
+        settings_btn.set_valign(Gtk.Align.START)
+        settings_btn.set_margin_top(6)
+        settings_btn.set_margin_end(6)
+        settings_btn.set_opacity(0.35)
+        settings_btn.connect('clicked', self.open_settings)
+
+        # Brighten on hover so it stays unobtrusive but discoverable
+        hover = Gtk.EventControllerMotion()
+        hover.connect('enter', lambda c, x, y: settings_btn.set_opacity(1.0))
+        hover.connect('leave', lambda c: settings_btn.set_opacity(0.35))
+        settings_btn.add_controller(hover)
+
+        overlay.add_overlay(settings_btn)
+        main_box.append(overlay)
 
         # Apply loaded config to compass
         self.compass.latitude = self.config['latitude']
@@ -821,14 +868,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.compass.offset = self.config['offset']
         self.compass.dark_mode = self.config['dark_mode']
         self.compass.gradient_color = tuple(self.config['gradient_color'])
+        self.compass.gradient_opacity = self.config['gradient_opacity']
         self.compass.font_family = self.config['font_family']
         self.compass.sun = Sun(self.compass.latitude, self.compass.longitude)
         self.compass.update_data()
 
-        # Apply dark mode using AdwStyleManager
+        # Apply dark-mode preference to the system GTK theme
         self.apply_dark_mode(self.compass.dark_mode)
 
-        self.set_content(main_box)
+        self.set_child(main_box)
 
         # Connect close request to save config
         self.connect('close-request', self.on_close_request)
@@ -842,6 +890,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.compass.offset,
             self.compass.dark_mode,
             self.compass.gradient_color,
+            self.compass.gradient_opacity,
             self.compass.font_family
         )
         dialog.connect('close-request', lambda d: self.on_settings_closed(d))
@@ -849,7 +898,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_settings_closed(self, dialog):
         if dialog.result:
-            latitude, longitude, timezone, offset, dark_mode, gradient_color, font_family = dialog.result
+            latitude, longitude, timezone, offset, dark_mode, gradient_color, gradient_opacity, font_family = dialog.result
 
             self.compass.latitude = latitude
             self.compass.longitude = longitude
@@ -857,6 +906,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.compass.offset = offset
             self.compass.dark_mode = dark_mode
             self.compass.gradient_color = gradient_color
+            self.compass.gradient_opacity = gradient_opacity
             self.compass.font_family = font_family
 
             self.compass.sun = Sun(latitude, longitude)
@@ -878,16 +928,18 @@ class MainWindow(Adw.ApplicationWindow):
             height = self.get_height()
             save_config(
                 latitude, longitude, timezone, offset, dark_mode, gradient_color,
-                width, height, self.compass.font_family
+                gradient_opacity, width, height, self.compass.font_family
             )
 
     def apply_dark_mode(self, dark_mode):
-        """Apply dark mode using AdwStyleManager"""
-        style_manager = Adw.StyleManager.get_default()
-        if dark_mode:
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-        else:
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        """Prefer the dark variant of the system GTK theme (Breeze-GTK on KDE).
+
+        With libadwaita dropped, GTK4 uses the system theme; toggling
+        gtk-application-prefer-dark-theme switches between its light/dark
+        variants so the content matches the native window frame.
+        """
+        settings = Gtk.Settings.get_default()
+        settings.set_property('gtk-application-prefer-dark-theme', dark_mode)
 
     def on_close_request(self, window):
         """Save config when window is closed"""
@@ -903,6 +955,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.compass.offset,
             self.compass.dark_mode,
             self.compass.gradient_color,
+            self.compass.gradient_opacity,
             width,
             height,
             self.compass.font_family
@@ -910,7 +963,7 @@ class MainWindow(Adw.ApplicationWindow):
         return False  # Allow the window to close
 
 
-class CelesunApp(Adw.Application):
+class CelesunApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id='com.celesun.app')
 
@@ -930,6 +983,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
     # Allow SIGINT to interrupt the GTK main loop
-    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, lambda: app.quit())
+    GLibUnix.signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, lambda: app.quit())
 
     app.run(sys.argv)
